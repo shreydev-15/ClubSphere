@@ -13,13 +13,6 @@ async function createclub(req,res){
       });
     }
 
-    if (club.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to update this club",
-      });
-    }
-
     const club = await Club.create({
       name,
       description,
@@ -45,7 +38,7 @@ async function createclub(req,res){
 async function getAllClubs (req, res){
   try {
     const clubs = await Club.find()
-      .populate("createdBy", "name email")
+      .populate("createdBy", "fullname email")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -68,7 +61,7 @@ async function getClubById (req, res) {
     const { clubId } = req.params;
 
     const club = await Club.findById(clubId)
-      .populate("createdBy", "name email");
+      .populate("createdBy", "fullname email");
 
     if (!club) {
       return res.status(404).json({
