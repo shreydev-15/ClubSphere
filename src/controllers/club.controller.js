@@ -1,4 +1,5 @@
 const Club = require('../models/club.model')
+const Membership = require('../models/memberships.model')
 
 //create
 async function createclub(req,res){
@@ -19,6 +20,12 @@ async function createclub(req,res){
       category,
       createdBy: req.user._id,
     });
+
+    await Membership.create({
+    user: req.user._id,
+  club: club._id,
+  role: "clubAdmin",
+});
 
     return res.status(201).json({
       success: true,
@@ -98,14 +105,6 @@ async function updateClub (req, res){
       });
     }
 
-    // Only the creator can update the club
-    if (club.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to update this club",
-      });
-    }
-
     // Update only the permitted fields
     if (name !== undefined) club.name = name;
     if (description !== undefined) {
@@ -143,14 +142,6 @@ async function deleteClub(req, res) {
       });
     }
 
-    // Only the creator can delete the club
-    if (club.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to delete this club",
-      });
-    }
-
     await club.deleteOne();
 
     return res.status(200).json({
@@ -173,4 +164,3 @@ module.exports = {
   updateClub,
   deleteClub
 }
-
