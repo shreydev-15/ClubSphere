@@ -17,7 +17,7 @@ const membershipSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ["clubAdmin", "member"],
-      default: "member",
+      default: "member",   
     },
   },
   { timestamps: true }
