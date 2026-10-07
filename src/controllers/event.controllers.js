@@ -7,7 +7,20 @@ async function createEvent(req, res) {
     const { clubId } = req.params;
     const { title, description, date, startTime, endTime, location } = req.body;
 
-    // Check whether club exists
+    if (!clubId) {
+      return res.status(400).json({
+        success: false,
+        message: "Club ID is required",
+      });
+    }
+
+    if (!title || !description || !date || !startTime || !endTime || !location) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, description, date, startTime, endTime and location are required",
+      });
+    }
+
     const club = await clubmodel.findById(clubId);
 
     if (!club) {
@@ -17,7 +30,6 @@ async function createEvent(req, res) {
       });
     }
 
-    // Create event
     const event = await Event.create({
       title,
       description,
@@ -45,6 +57,7 @@ async function createEvent(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to create event",
+      error: error.message,
     });
   }
 }
