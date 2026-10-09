@@ -1,5 +1,7 @@
 const Event = require('../models/events.models');
 const clubmodel = require('../models/club.model');
+const Membership = require('../models/memberships.model');
+const GoogleAccount = require('../models/googleAccount.models');
 const {
   createGoogleCalendarEvent,
   updateGoogleCalendarEvent,
@@ -22,6 +24,55 @@ function toGoogleEventData(event) {
       timeZone: "Asia/Kolkata",
     },
   };
+}
+
+function getCalendarSyncStatus(syncs) {
+  if (syncs.length === 0) return "not_connected";
+
+  const syncedCount = syncs.filter((sync) => sync.status === "synced").length;
+
+  if (syncedCount === syncs.length) return "synced";
+  if (syncedCount === 0) return "failed";
+  return "partial";
+}
+
+async function createMemberCalendarEvents(event, clubId, creatorId) {
+  const memberIds = await Membership.distinct("user", { club: clubId });
+  const recipientIds = [
+    ...new Set([...memberIds.map(String), creatorId.toString()]),
+  ];
+  const googleAccounts = await GoogleAccount.find({
+    user: { $in: recipientIds },
+    refreshToken: { $exists: true, $nin: [null, ""] },
+  }).select("user");
+
+  return Promise.all(
+    googleAccounts.map(async (googleAccount) => {
+      try {
+        const googleEvent = await createGoogleCalendarEvent(
+          googleAccount.user,
+          toGoogleEventData(event)
+        );
+
+        return {
+          user: googleAccount.user,
+          googleEventId: googleEvent.id,
+          status: "synced",
+        };
+      } catch (error) {
+        console.error(
+          `Google Calendar sync failed for user ${googleAccount.user}:`,
+          error.message
+        );
+
+        return {
+          user: googleAccount.user,
+          googleEventId: null,
+          status: "failed",
+        };
+      }
+    })
+  );
 }
 
 // CREATE EVENT
@@ -82,16 +133,22 @@ async function createEvent(req, res) {
       calendarSyncStatus: "not_connected",
     });
 
-    // 2. Attempt to sync with the creator's Google Calendar
+    // Sync to the primary calendars of club members who connected Google.
     try {
-      const googleEvent = await createGoogleCalendarEvent(
-        req.user._id,
-        toGoogleEventData(event)
+      event.googleCalendarSyncs = await createMemberCalendarEvents(
+        event,
+        clubId,
+        req.user._id
       );
+      event.calendarSyncStatus = getCalendarSyncStatus(event.googleCalendarSyncs);
 
-      event.googleEventId = googleEvent.id;
-      event.googleCalendarOwner = req.user._id;
-      event.calendarSyncStatus = "synced";
+      const creatorSync = event.googleCalendarSyncs.find(
+        (sync) => sync.user.toString() === req.user._id.toString()
+      );
+      if (creatorSync?.status === "synced") {
+        event.googleEventId = creatorSync.googleEventId;
+        event.googleCalendarOwner = req.user._id;
+      }
 
       await event.save();
     } catch (calendarError) {
@@ -235,8 +292,32 @@ async function updateEvent(req, res) {
     // Save changes in ClubSphere first
     await event.save();
 
-    // Sync changes to Google Calendar if linked
-    if (event.googleEventId && event.googleCalendarOwner) {
+    // Update each member's linked Google Calendar copy.
+    if (event.googleCalendarSyncs?.length) {
+      await Promise.all(
+        event.googleCalendarSyncs.map(async (sync) => {
+          if (!sync.googleEventId) return;
+
+          try {
+            await updateGoogleCalendarEvent(
+              sync.user,
+              sync.googleEventId,
+              toGoogleEventData(event)
+            );
+            sync.status = "synced";
+          } catch (calendarError) {
+            console.error(
+              `Google Calendar update failed for user ${sync.user}:`,
+              calendarError.message
+            );
+            sync.status = "failed";
+          }
+        })
+      );
+
+      event.calendarSyncStatus = getCalendarSyncStatus(event.googleCalendarSyncs);
+      await event.save();
+    } else if (event.googleEventId && event.googleCalendarOwner) {
       try {
         await updateGoogleCalendarEvent(
           event.googleCalendarOwner,
@@ -294,8 +375,23 @@ async function deleteEvent(req, res) {
       });
     }
 
-    // Delete the linked Google Calendar event if one exists
-    if (event.googleEventId && event.googleCalendarOwner) {
+    // Delete each member's linked Google Calendar copy.
+    if (event.googleCalendarSyncs?.length) {
+      await Promise.all(
+        event.googleCalendarSyncs.map(async (sync) => {
+          if (!sync.googleEventId) return;
+
+          try {
+            await deleteGoogleCalendarEvent(sync.user, sync.googleEventId);
+          } catch (calendarError) {
+            console.error(
+              `Google Calendar deletion failed for user ${sync.user}:`,
+              calendarError.message
+            );
+          }
+        })
+      );
+    } else if (event.googleEventId && event.googleCalendarOwner) {
       try {
         await deleteGoogleCalendarEvent(
           event.googleCalendarOwner,

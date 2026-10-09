@@ -57,9 +57,26 @@ googleCalendarOwner: {
   default: null,
 },
 
+googleCalendarSyncs: [{
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  googleEventId: {
+    type: String,
+    default: null,
+  },
+  status: {
+    type: String,
+    enum: ["synced", "failed"],
+    required: true,
+  },
+}],
+
 calendarSyncStatus: {
   type: String,
-  enum: ["pending", "synced", "failed", "not_connected"],
+  enum: ["pending", "synced", "partial", "failed", "not_connected"],
   default: "not_connected",
 },
 
