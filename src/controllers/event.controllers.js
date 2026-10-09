@@ -1,11 +1,42 @@
 const Event = require('../models/events.models');
 const clubmodel = require('../models/club.model');
+const {
+  createGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+} = require('../services/calender.services');
+
+function toGoogleEventData(event) {
+  const date = new Date(event.date).toISOString().split("T")[0];
+
+  return {
+    summary: event.title,
+    description: event.description || "",
+    location: event.location || "",
+    start: {
+      dateTime: `${date}T${event.startTime}:00+05:30`,
+      timeZone: "Asia/Kolkata",
+    },
+    end: {
+      dateTime: `${date}T${event.endTime}:00+05:30`,
+      timeZone: "Asia/Kolkata",
+    },
+  };
+}
 
 // CREATE EVENT
+
 async function createEvent(req, res) {
   try {
     const { clubId } = req.params;
-    const { title, description, date, startTime, endTime, location } = req.body;
+    const {
+      title,
+      description,
+      date,
+      startTime,
+      endTime,
+      location,
+    } = req.body;
 
     if (!clubId) {
       return res.status(400).json({
@@ -14,10 +45,18 @@ async function createEvent(req, res) {
       });
     }
 
-    if (!title || !description || !date || !startTime || !endTime || !location) {
+    if (
+      !title ||
+      !description ||
+      !date ||
+      !startTime ||
+      !endTime ||
+      !location
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Title, description, date, startTime, endTime and location are required",
+        message:
+          "Title, description, date, startTime, endTime and location are required",
       });
     }
 
@@ -30,6 +69,7 @@ async function createEvent(req, res) {
       });
     }
 
+    // 1. Create the event in MongoDB first
     const event = await Event.create({
       title,
       description,
@@ -39,8 +79,32 @@ async function createEvent(req, res) {
       location,
       club: clubId,
       createdBy: req.user._id,
+      calendarSyncStatus: "not_connected",
     });
 
+    // 2. Attempt to sync with the creator's Google Calendar
+    try {
+      const googleEvent = await createGoogleCalendarEvent(
+        req.user._id,
+        toGoogleEventData(event)
+      );
+
+      event.googleEventId = googleEvent.id;
+      event.googleCalendarOwner = req.user._id;
+      event.calendarSyncStatus = "synced";
+
+      await event.save();
+    } catch (calendarError) {
+      console.error(
+        "Google Calendar sync failed:",
+        calendarError.message
+      );
+
+      event.calendarSyncStatus = "failed";
+      await event.save();
+    }
+
+    // 3. Return the locally saved event, even if Google sync failed
     return res.status(201).json({
       success: true,
       message: "Event created successfully",
@@ -61,6 +125,7 @@ async function createEvent(req, res) {
     });
   }
 }
+
 
 
 // GET ALL EVENTS OF A CLUB
@@ -167,7 +232,30 @@ async function updateEvent(req, res) {
     if (endTime !== undefined) event.endTime = endTime;
     if (location !== undefined) event.location = location;
 
+    // Save changes in ClubSphere first
     await event.save();
+
+    // Sync changes to Google Calendar if linked
+    if (event.googleEventId && event.googleCalendarOwner) {
+      try {
+        await updateGoogleCalendarEvent(
+          event.googleCalendarOwner,
+          event.googleEventId,
+          toGoogleEventData(event)
+        );
+
+        event.calendarSyncStatus = "synced";
+      } catch (calendarError) {
+        console.error(
+          "Google Calendar update failed:",
+          calendarError.message
+        );
+
+        event.calendarSyncStatus = "failed";
+      }
+
+      await event.save();
+    }
 
     return res.status(200).json({
       success: true,
@@ -189,13 +277,12 @@ async function updateEvent(req, res) {
   }
 }
 
-
 // DELETE EVENT
 async function deleteEvent(req, res) {
   try {
     const { clubId, eventId } = req.params;
 
-    const event = await Event.findOneAndDelete({
+    const event = await Event.findOne({
       _id: eventId,
       club: clubId,
     });
@@ -206,6 +293,24 @@ async function deleteEvent(req, res) {
         message: "Event not found",
       });
     }
+
+    // Delete the linked Google Calendar event if one exists
+    if (event.googleEventId && event.googleCalendarOwner) {
+      try {
+        await deleteGoogleCalendarEvent(
+          event.googleCalendarOwner,
+          event.googleEventId
+        );
+      } catch (calendarError) {
+        console.error(
+          "Google Calendar deletion failed:",
+          calendarError.message
+        );
+      }
+    }
+
+    // Delete the ClubSphere event
+    await event.deleteOne();
 
     return res.status(200).json({
       success: true,
