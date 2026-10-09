@@ -46,6 +46,23 @@ const eventSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    googleEventId: {
+  type: String,
+  default: null,
+},
+
+googleCalendarOwner: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  default: null,
+},
+
+calendarSyncStatus: {
+  type: String,
+  enum: ["pending", "synced", "failed", "not_connected"],
+  default: "not_connected",
+},
+
   },
   {
     timestamps: true,
