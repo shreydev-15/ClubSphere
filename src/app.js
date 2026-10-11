@@ -5,6 +5,7 @@ const membershiprouter = require('./routes/membership.routes')
 const eventrouter = require('./routes/events.routes')
 const googleRoutes = require('./routes/google.routes')
 const discussionrouter = require('./routes/discussion.routes')
+const replyroutes = require('./routes/reply.routes')
 const cookieparser = require('cookie-parser')
 
 const app = express()
@@ -18,5 +19,6 @@ app.use('/api/clubs', membershiprouter)
 app.use('/api/clubs', eventrouter)
 app.use("/api/auth", googleRoutes);
 app.use("/api/clubs", discussionrouter);
+app.use('/api/clubs', replyroutes)
 
 module.exports = app
