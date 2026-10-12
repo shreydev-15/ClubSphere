@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/auth.service';
 import { clubsService } from '../services/clubs.service';
 import { eventsService } from '../services/events.service';
 import { EventCard } from '../components/events/EventCard';
@@ -10,11 +11,12 @@ import { Badge } from '../components/feedback/Badge';
 import { CardSkeleton } from '../components/feedback/Skeleton';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { Alert } from '../components/feedback/Alert';
-import { SearchIcon, EventsIcon, CalendarSyncIcon } from '../components/common/Icons';
+import { SearchIcon, EventsIcon, CalendarSyncIcon, CheckIcon } from '../components/common/Icons';
 
 export function EventsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [clubs, setClubs] = useState([]);
   const [events, setEvents] = useState([]);
@@ -23,6 +25,44 @@ export function EventsPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClubId, setSelectedClubId] = useState('All');
+
+  // Google Calendar status
+  const [googleStatus, setGoogleStatus] = useState(null); // null = loading, { connected: bool }
+  const [googleConnectedJustNow, setGoogleConnectedJustNow] = useState(false);
+  const [googleError, setGoogleError] = useState(null);
+
+  // Detect redirect from Google OAuth callback
+  useEffect(() => {
+    const connected = searchParams.get('googleConnected');
+    const err = searchParams.get('googleError');
+
+    if (connected === 'true') {
+      setGoogleConnectedJustNow(true);
+      // Clear query param from URL without page reload
+      setSearchParams({}, { replace: true });
+    }
+
+    if (err) {
+      const messages = {
+        cancelled: 'Google Calendar connection was cancelled.',
+        missing_params: 'OAuth returned missing parameters. Please try again.',
+        invalid_state: 'OAuth state was invalid. Please try again.',
+        expired_state: 'OAuth session expired. Please reconnect.',
+        no_token: 'Google did not return an access token. Please try again.',
+        server_error: 'A server error occurred. Please try again later.',
+      };
+      setGoogleError(messages[err] || 'Google Calendar connection failed.');
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Fetch Google Calendar connection status
+  useEffect(() => {
+    if (!user) return;
+    authService.getGoogleStatus()
+      .then((data) => setGoogleStatus(data))
+      .catch(() => setGoogleStatus({ connected: false }));
+  }, [user, googleConnectedJustNow]);
 
   useEffect(() => {
     let mounted = true;
@@ -84,6 +124,8 @@ export function EventsPage() {
     });
   }, [events, searchQuery, selectedClubId]);
 
+  const isConnected = googleStatus?.connected;
+
   return (
     <div>
       <div className="page-header">
@@ -94,25 +136,54 @@ export function EventsPage() {
               Upcoming club workshops, hackathons, and meetings synchronized with Google Calendar.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="md"
-            icon={CalendarSyncIcon}
-            onClick={() => navigate('/profile')}
-          >
-            Google Calendar Sync Status
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {isConnected && (
+              <Badge variant="success" size="sm">
+                ✓ Google Calendar Synced
+              </Badge>
+            )}
+            <Button
+              variant={isConnected ? 'outline' : 'secondary'}
+              size="md"
+              icon={CalendarSyncIcon}
+              onClick={() => navigate('/profile')}
+            >
+              {isConnected ? 'Manage Sync' : 'Google Calendar Sync'}
+            </Button>
+          </div>
         </div>
       </div>
 
+      {/* Just connected success banner */}
+      {googleConnectedJustNow && (
+        <Alert
+          variant="success"
+          onClose={() => setGoogleConnectedJustNow(false)}
+          style={{ marginBottom: '16px' }}
+        >
+          <strong>Google Calendar connected successfully!</strong> Club events you're enrolled in will automatically sync to your Google Calendar.
+        </Alert>
+      )}
+
+      {/* Google error banner */}
+      {googleError && (
+        <Alert
+          variant="danger"
+          onClose={() => setGoogleError(null)}
+          style={{ marginBottom: '16px' }}
+        >
+          {googleError}
+        </Alert>
+      )}
+
       {error && <Alert variant="danger" onClose={() => setError(null)}>{error}</Alert>}
 
-      {/* Calendar Notice Banner */}
+      {/* Google Calendar sync status banner */}
       <div
         className="card"
         style={{
-          backgroundColor: 'var(--brand-subtle)',
-          borderColor: 'var(--brand-border)',
+          backgroundColor: isConnected ? 'var(--status-success-bg, #f0fdf4)' : 'var(--brand-subtle)',
+          borderColor: isConnected ? 'var(--status-success-border, #86efac)' : 'var(--brand-border)',
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
@@ -127,27 +198,46 @@ export function EventsPage() {
               width: '32px',
               height: '32px',
               borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--brand-primary)',
+              backgroundColor: isConnected ? 'var(--status-success-text, #16a34a)' : 'var(--brand-primary)',
               color: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <CalendarSyncIcon size={16} />
+            {isConnected ? <CheckIcon size={16} /> : <CalendarSyncIcon size={16} />}
           </div>
           <div>
-            <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--brand-fg)' }}>
-              Automated Google Calendar Synchronization
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--brand-fg)', opacity: 0.85 }}>
-              Connect your Google account in Settings to automatically add events for any club you belong to directly to your primary calendar.
-            </p>
+            {isConnected ? (
+              <>
+                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--status-success-text, #16a34a)' }}>
+                  Google Calendar is synced
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', opacity: 0.9 }}>
+                  New club events are automatically added to your primary Google Calendar.
+                  {googleStatus?.connectedAt && (
+                    <> Connected {new Date(googleStatus.connectedAt).toLocaleDateString()}.</>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--brand-fg)' }}>
+                  Automated Google Calendar Synchronization
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--brand-fg)', opacity: 0.85 }}>
+                  Connect your Google account to automatically add events for clubs you belong to.
+                </p>
+              </>
+            )}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate('/profile')}>
-          Manage Integration
-        </Button>
+        {!isConnected && (
+          <Button variant="outline" size="sm" onClick={() => navigate('/profile')}>
+            Connect Now
+          </Button>
+        )}
       </div>
 
       {/* Filter and Search */}

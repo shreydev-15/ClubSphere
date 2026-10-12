@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
@@ -6,7 +6,6 @@ import { Button } from '../components/feedback/Button';
 import { Badge } from '../components/feedback/Badge';
 import { Alert } from '../components/feedback/Alert';
 import {
-  ProfileIcon,
   CalendarSyncIcon,
   LogoutIcon,
   CheckIcon,
@@ -16,6 +15,18 @@ export function ProfilePage() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState(null);
+  const [googleStatusLoading, setGoogleStatusLoading] = useState(true);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setGoogleStatusLoading(true);
+    authService.getGoogleStatus()
+      .then((data) => setGoogleStatus(data))
+      .catch(() => setGoogleStatus({ connected: false }))
+      .finally(() => setGoogleStatusLoading(false));
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -28,9 +39,12 @@ export function ProfilePage() {
   };
 
   const handleConnectGoogle = () => {
+    setConnectingGoogle(true);
     // Direct browser navigation to start Google Calendar OAuth consent flow
     window.location.href = authService.getGoogleConnectUrl();
   };
+
+  const isConnected = googleStatus?.connected;
 
   return (
     <div style={{ maxWidth: '780px', margin: '0 auto' }}>
@@ -105,7 +119,16 @@ export function ProfilePage() {
         </div>
 
         {/* Google Calendar Integration Card */}
-        <div className="card" style={{ padding: '28px' }}>
+        <div
+          className="card"
+          style={{
+            padding: '28px',
+            ...(isConnected ? {
+              borderColor: 'var(--status-success-border, #86efac)',
+              backgroundColor: 'var(--status-success-bg, #f0fdf4)',
+            } : {}),
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div
@@ -113,59 +136,104 @@ export function ProfilePage() {
                   width: '40px',
                   height: '40px',
                   borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--brand-subtle)',
-                  color: 'var(--brand-fg)',
+                  backgroundColor: isConnected
+                    ? 'var(--status-success-text, #16a34a)'
+                    : 'var(--brand-subtle)',
+                  color: isConnected ? '#FFFFFF' : 'var(--brand-fg)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  transition: 'background-color 0.25s ease',
                 }}
               >
-                <CalendarSyncIcon size={20} />
+                {isConnected ? <CheckIcon size={20} /> : <CalendarSyncIcon size={20} />}
               </div>
               <div>
-                <h3 style={{ fontSize: 'var(--text-md)', fontWeight: 600 }}>Google Calendar Integration</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Automate schedule management for workshops and meetings
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: 'var(--text-md)', fontWeight: 600 }}>Google Calendar Integration</h3>
+                  {!googleStatusLoading && (
+                    <Badge variant={isConnected ? 'success' : 'neutral'} size="xs">
+                      {isConnected ? '● Connected' : '○ Not connected'}
+                    </Badge>
+                  )}
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {googleStatusLoading
+                    ? 'Checking status...'
+                    : isConnected
+                      ? `Syncing club events to your Google Calendar${googleStatus?.connectedAt ? ` since ${new Date(googleStatus.connectedAt).toLocaleDateString()}` : ''}.`
+                      : 'Automate schedule management for workshops and meetings'}
                 </p>
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              icon={CalendarSyncIcon}
-              onClick={handleConnectGoogle}
+            {!googleStatusLoading && (
+              <Button
+                variant={isConnected ? 'outline' : 'primary'}
+                size="md"
+                icon={isConnected ? CheckIcon : CalendarSyncIcon}
+                onClick={handleConnectGoogle}
+                loading={connectingGoogle}
+              >
+                {isConnected ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+              </Button>
+            )}
+          </div>
+
+          {isConnected ? (
+            <div
+              style={{
+                padding: '12px 16px',
+                backgroundColor: 'rgba(255,255,255,0.6)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--status-success-border, #86efac)',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+              }}
             >
-              Connect Google Calendar
-            </Button>
-          </div>
+              <span style={{ fontWeight: 600, color: 'var(--status-success-text, #16a34a)' }}>
+                ✓ Active Sync Configuration:
+              </span>
+              <span>• Google Calendar Events scope (<code>calendar.events</code>) — authorized</span>
+              <span>• OAuth tokens stored securely in MongoDB and refreshed automatically</span>
+              <span>• Events from clubs you're actively enrolled in are synchronized</span>
+              {googleStatus?.tokenExpiry && (
+                <span>• Token valid until: {new Date(googleStatus.tokenExpiry).toLocaleString()}</span>
+              )}
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px' }}>
+                Connecting your Google Calendar enables ClubSphere to automatically dispatch events created
+                in your clubs directly to your Google Calendar. This uses Google OAuth 2.0 with restricted calendar
+                event permissions.
+              </p>
 
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px' }}>
-            Connecting your Google Calendar enables ClubSphere to automatically dispatch events created
-            in your clubs directly to your Google Calendar. This uses Google OAuth 2.0 with restricted calendar
-            event permissions.
-          </p>
-
-          <div
-            style={{
-              padding: '12px 16px',
-              backgroundColor: 'var(--bg-primary)',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-            }}
-          >
-            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Verified Integration Scope:
-            </span>
-            <span>&bull; Google Calendar Events scope (<code>calendar.events</code>)</span>
-            <span>&bull; OAuth tokens are stored securely in MongoDB and refreshed automatically</span>
-            <span>&bull; Only events from clubs you are actively enrolled in will be synchronized</span>
-          </div>
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: 'var(--bg-primary)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '12px',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                }}
+              >
+                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Verified Integration Scope:
+                </span>
+                <span>&bull; Google Calendar Events scope (<code>calendar.events</code>)</span>
+                <span>&bull; OAuth tokens are stored securely in MongoDB and refreshed automatically</span>
+                <span>&bull; Only events from clubs you are actively enrolled in will be synchronized</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Session & Sign Out Card */}

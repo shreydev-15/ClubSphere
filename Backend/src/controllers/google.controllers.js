@@ -39,37 +39,33 @@ const connectGoogle = (req, res) => {
 
 // Step 2: Google redirects back here with a code
 const googleCallback = async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  // Normalise: strip trailing slash
+  const baseUrl = frontendUrl.replace(/\/+$/, '');
+
   try {
     const { code, state, error } = req.query;
 
     if (error) {
-      return res.status(400).json({
-        message: "Google Calendar connection was cancelled or denied",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=cancelled`);
     }
 
     if (!code || !state) {
-      return res.status(400).json({
-        message: "Missing authorization code or state",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=missing_params`);
     }
 
     // Validate state and identify the initiating ClubSphere user
     const decoded = jwt.verify(state, process.env.JWT_TOKEN);
 
     if (!decoded.userId) {
-      return res.status(400).json({
-        message: "Invalid OAuth state",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=invalid_state`);
     }
 
     // Exchange the authorization code for Google tokens
     const { tokens } = await oauth2Client.getToken(code);
 
     if (!tokens.access_token) {
-      return res.status(400).json({
-        message: "Google did not provide an access token",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=no_token`);
     }
 
     oauth2Client.setCredentials(tokens);
@@ -83,9 +79,7 @@ const googleCallback = async (req, res) => {
     const { data: googleUser } = await oauth2.userinfo.get();
 
     if (!googleUser.id) {
-      return res.status(400).json({
-        message: "Could not identify the Google account",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=no_google_id`);
     }
 
     const accountData = {
@@ -112,9 +106,8 @@ const googleCallback = async (req, res) => {
       { upsert: true, new: true, runValidators: true }
     );
 
-    return res.status(200).send(
-      "Google Calendar connected successfully. You can close this page."
-    );
+    // Redirect back to the frontend Events page with success flag
+    return res.redirect(`${baseUrl}/events?googleConnected=true`);
   } catch (error) {
     console.error("Google OAuth callback failed:", error.message);
 
@@ -122,18 +115,37 @@ const googleCallback = async (req, res) => {
       error.name === "JsonWebTokenError" ||
       error.name === "TokenExpiredError"
     ) {
-      return res.status(400).json({
-        message: "OAuth state is invalid or expired. Please try again.",
-      });
+      return res.redirect(`${baseUrl}/events?googleError=expired_state`);
     }
 
-    return res.status(500).json({
-      message: "Failed to connect Google Calendar",
+    return res.redirect(`${baseUrl}/events?googleError=server_error`);
+  }
+};
+
+// GET /api/auth/google/status — returns whether the authed user has connected Google Calendar
+const getGoogleStatus = async (req, res) => {
+  try {
+    const account = await GoogleAccount.findOne({ user: req.user._id }).lean();
+
+    if (!account) {
+      return res.status(200).json({ connected: false });
+    }
+
+    return res.status(200).json({
+      connected: true,
+      googleId: account.googleId,
+      connectedAt: account.createdAt,
+      tokenExpiry: account.tokenExpiry,
+      scope: account.scope,
     });
+  } catch (error) {
+    console.error("Google status check failed:", error.message);
+    return res.status(500).json({ message: "Failed to fetch Google Calendar status" });
   }
 };
 
 module.exports = {
   connectGoogle,
   googleCallback,
+  getGoogleStatus,
 };

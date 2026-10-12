@@ -44,4 +44,8 @@ export const authService = {
   getGoogleConnectUrl() {
     return `${API_BASE_URL}/api/auth/google/connect`;
   },
+
+  async getGoogleStatus() {
+    return apiClient('/api/auth/google/status', { method: 'GET' });
+  },
 };
