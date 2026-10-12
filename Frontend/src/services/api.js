@@ -17,9 +17,15 @@ export async function apiClient(endpoint, options = {}) {
     ...customConfig
   } = options;
 
+  const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const authHeaders = storedToken && !headers.Authorization && !headers.authorization
+    ? { Authorization: `Bearer ${storedToken}` }
+    : {};
+
   const config = {
     method,
     headers: {
+      ...authHeaders,
       ...headers,
     },
     // Always include credentials so HttpOnly cookies are attached across requests

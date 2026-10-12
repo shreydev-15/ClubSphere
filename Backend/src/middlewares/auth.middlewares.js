@@ -3,7 +3,9 @@ const userModel = require('../models/auth.models')
 
 async function userAuth(req, res, next) {
     try {
-        const token = req.cookies?.token
+        const authHeader = req.headers.authorization;
+        const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+        const token = req.cookies?.token || bearerToken;
 
         if (!token) {
             return res.status(401).json({

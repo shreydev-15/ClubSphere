@@ -35,6 +35,9 @@ export function AuthProvider({ children }) {
   const login = async ({ email, password }) => {
     setAuthError(null);
     const data = await authService.login({ email, password });
+    if (data?.token) {
+      localStorage.setItem('token', data.token);
+    }
     if (data?.user) {
       const userData = {
         ...data.user,
@@ -49,6 +52,9 @@ export function AuthProvider({ children }) {
   const register = async ({ email, firstname, lastname, password }) => {
     setAuthError(null);
     const data = await authService.register({ email, firstname, lastname, password });
+    if (data?.token) {
+      localStorage.setItem('token', data.token);
+    }
     if (data?.user) {
       const userData = {
         ...data.user,
@@ -66,6 +72,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      localStorage.removeItem('token');
       setUser(null);
     }
   };

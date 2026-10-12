@@ -6,9 +6,19 @@ async function socketAuth(socket, next) {
   try {
     const rawCookie = socket.handshake.headers.cookie || "";
 
-    // Your installed cookie package uses parseCookie()
-    const cookies = cookie.parseCookie(rawCookie);
-    const token = cookies.token;
+    let token = null;
+    if (rawCookie) {
+      try {
+        const cookies = typeof cookie.parseCookie === 'function' ? cookie.parseCookie(rawCookie) : cookie.parse(rawCookie);
+        token = cookies?.token;
+      } catch (err) {
+        // Fallback if parsing fails
+      }
+    }
+
+    if (!token && socket.handshake.auth && socket.handshake.auth.token) {
+      token = socket.handshake.auth.token;
+    }
 
     if (!token) {
       return next(new Error("Unauthorized: token missing"));

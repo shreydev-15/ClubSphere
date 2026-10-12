@@ -22,9 +22,11 @@ export function SocketProvider({ children }) {
       return;
     }
 
-    // Connect to Socket.IO with credentials (cookies)
+    // Connect to Socket.IO with credentials (cookies + token in handshake auth)
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const socket = io(SOCKET_SERVER_URL, {
       withCredentials: true,
+      auth: storedToken ? { token: storedToken } : undefined,
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnectionAttempts: 5,

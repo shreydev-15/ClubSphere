@@ -2,6 +2,13 @@ const userModel = require('../models/auth.models')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
+const COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 async function register(req,res){
     const {email, fullname: {firstname, lastname}, password} = req.body
     const isRegistered = await userModel.findOne({email})
@@ -22,7 +29,7 @@ async function register(req,res){
     })
 
     const token = jwt.sign({id: user._id} ,process.env.JWT_TOKEN)
-    res.cookie("token", token)
+    res.cookie("token", token, COOKIE_OPTIONS)
     res.status(201).json({
         message: "User registered Succussfully",
         token,
@@ -55,7 +62,7 @@ async function login(req, res) {
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_TOKEN);
 
-    res.cookie("token", token);
+    res.cookie("token", token, COOKIE_OPTIONS);
 
     return res.status(200).json({
         message: "User Logged in successfully",
@@ -106,7 +113,7 @@ async function getme(req, res) {
 //logout
 
 async function logout(req, res) {
-    res.clearCookie('token')
+    res.clearCookie('token', COOKIE_OPTIONS)
     return res.status(200).json({
         message: 'User logged out succussfully'
     })

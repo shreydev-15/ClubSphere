@@ -10,9 +10,25 @@ const connectDB = require("./src/db/db");
 
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://club-sphere-chi.vercel.app',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin === 'http://localhost:5173'
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Socket origin ${origin} not allowed`));
+    },
     credentials: true,
   },
 });
