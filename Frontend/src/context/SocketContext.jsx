@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 
-const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || '';
+const SOCKET_SERVER_URL = (import.meta.env.VITE_SOCKET_URL || '').replace(/\/+$/, '');
 
 export function SocketProvider({ children }) {
   const { isAuthenticated } = useAuth();

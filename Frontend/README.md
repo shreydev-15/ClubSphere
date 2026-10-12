@@ -1,16 +1,48 @@
-# React + Vite
+# ClubSphere - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+ClubSphere is a college club and campus community engagement platform built with React, Vite, and modern CSS design tokens.
 
-Currently, two official plugins are available:
+## 🔗 Deployed Backend
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The backend is deployed and accessible at:
+- **Production API & Socket Server**: `https://clubsphere-9w89.onrender.com`
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Environment Variables
 
-## Expanding the Oxlint configuration
+Create a `.env` file in the `Frontend/` directory:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```env
+# Backend API & Socket URL
+VITE_API_BASE_URL=https://clubsphere-9w89.onrender.com
+VITE_SOCKET_URL=https://clubsphere-9w89.onrender.com
+```
+
+- When using `npm run dev`, Vite's development proxy will also automatically forward requests to `https://clubsphere-9w89.onrender.com`.
+- When building for production (`npm run build`), Vite embeds the values from `.env` / `.env.production`.
+
+---
+
+## 🚀 Getting Started
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Start Development Server**:
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+3. **Build for Production**:
+   ```bash
+   npm run build
+   ```
+
+4. **Preview Production Build**:
+   ```bash
+   npm run preview
+   ```
